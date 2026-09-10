@@ -31,13 +31,15 @@
 .input-box { flex: 0.5; background: var(--bg-box); padding: 8px; border-radius: 6px; display: flex; flex-direction: column; }
 .input-box h3 { margin-bottom: 5px; text-align: center; font-size: 14px; background: var(--accent); color: white; padding: 4px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; }
     textarea { flex: 1; width: 100%; background: var(--bg-input); color: var(--text-input); border: 1px solid #ccc; padding: 6px; font-size: 13px; resize: none; font-family: Calibri; }
-.store-total { font-size: 18px; font-weight: bold; color: var(--accent-gold); text-align: center; padding: 5px; background: #000; border-radius: 4px; margin-top: 5px; }
+.store-total { font-size: 16px; font-weight: bold; color: var(--accent-gold); text-align: center; padding: 5px; background: #000; border-radius: 4px; margin-top: 5px; }
 .table-box { flex: 3.5; background: var(--bg-box); padding: 8px; border-radius: 6px; display: flex; flex-direction: column; }
+.match-total-bar { font-size: 16px; font-weight: bold; color: #00FF00; text-align: center; padding: 6px; background: #000; border-radius: 4px; margin-bottom: 5px; }
 .table-scroll { flex: 1; overflow-y: auto; overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
     th { background: var(--accent); color: white; padding: 4px; border: 1px solid #444; position: sticky; top: 0; z-index: 1; white-space: nowrap; font-size: 13px; }
     td { padding: 3px 5px; border: 1px solid #ddd; background: var(--bg-input); color: var(--text-input); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     tr.match td { background: #FFFF00; color: black; font-weight: bold; }
+    tr.breakmatch td { background: #ADD8E6; color: black; font-weight: bold; } /* NEW: Light Blue */
     tr.bankonly td { background: #FFB6C1; color: black; }
     tr.storeonly td { background: #FFA07A; color: black; }
 .button-bar { background: #111; padding: 8px; text-align: center; }
@@ -49,8 +51,6 @@
 .file-info { font-size: 11px; color: #90EE90; text-align: center; margin-top: 3px; }
 .footer { background: var(--bg-footer); color: var(--accent-gold); text-align: center; padding: 10px; font-size: 11px; font-weight: 500; letter-spacing: 0.3px; border-top: 1px solid var(--accent); line-height: 1.6; }
 .footer.brand { font-size: 12px; font-weight: bold; color: #fff; }
-.footer.contact { font-size: 12px; color: #fff; margin: 3px 0; }
-.footer.links a,.footer.links a:visited,.footer.links a:hover { color: #FFFFFF!important; text-decoration: none; margin: 0 5px; }
 .hidden { display: none; }
 .small-btn { font-size:10px; padding:2px 6px; background:#C00000; color:white; border:none; border-radius:3px; cursor:pointer; }
 </style>
@@ -60,7 +60,7 @@
         <img src="https://placehold.co/45x45/217346/FFD700?text=A8" alt="Active8 Logo" class="logo">
         <div class="header-center">
             <h1>DATA MATCHER</h1>
-            <p>HM-AURA V12.0 | Developed by SHARJEEL SIDDIQUI <span class="counter" id="counter"></span></p>
+            <p>HM-AURA V13.0 | Developed by SHARJEEL SIDDIQUI <span class="counter" id="counter"></span></p>
         </div>
         <button class="theme-btn" onclick="toggleTheme()">🌙 Dark/Light</button>
     </div>
@@ -88,6 +88,7 @@
             <div class="store-total" id="storeTotal">Store Total: 0.00</div>
         </div>
         <div class="table-box">
+            <div class="match-total-bar" id="matchTotal">Matched Total: 0.00</div>
             <div class="table-scroll">
                 <table id="resultTable">
                     <thead><tr><th style="width:4%">S#</th><th style="width:23%">Bank Amount</th><th style="width:23%">Store Amount</th><th style="width:50%">Status</th></tr></thead>
@@ -104,7 +105,7 @@
     </div>
 
     <div class="footer">
-        <div class="brand">HM-AURA V12.0 | Developed by SHARJEEL SIDDIQUI</div>
+        <div class="brand">HM-AURA V13.0 | Developed by SHARJEEL SIDDIQUI</div>
         <div class="contact">📞 For Support & Contact: <b>0092-333-3161173</b></div>
         <div>© 2026 HM-AURA. All Rights Reserved.</div>
     </div>
@@ -145,7 +146,7 @@ function loadBankFile(event) {
             type: cols[typeIdx]?.toString().trim() || '',
             market: cols[marketIdx]?.toString().trim() || '',
             storeId: cols[storeIdx]?.toString().trim() || '',
-            amount: cols[amountIdx]?.toString().trim() || '',
+            amount: parseFloat(cols[amountIdx]?.toString().replace(/,/g,'')) || 0,
             raw: cols.join(',')
         }));
         document.getElementById('fileInfo').innerText = `Loaded: ${file.name} | Total: ${rawBankData.length} rows`;
@@ -161,10 +162,9 @@ function populateDropdowns() {
     let markets = [...new Set(rawBankData.map(x=>x.market))].filter(Boolean).sort();
     fillSelect('typeFilter', types);
     fillSelect('marketFilter', markets);
-    fillSelect('storeIdFilter', []); // Store ID khali rahega shuru me
+    fillSelect('storeIdFilter', []);
 }
 
-// NEW: Market change hote hi Store ID update hoga
 function marketChanged() {
     let selectedMarket = document.getElementById('marketFilter').value;
     let stores = [...new Set(rawBankData.filter(x =>!selectedMarket || x.market === selectedMarket).map(x=>x.storeId))].filter(Boolean).sort();
@@ -193,13 +193,6 @@ function applyFilter() {
     document.getElementById('bank').value = filteredBankData.map(x=>x.amount).join('\n');
 }
 
-function normalizeValue(val) {
-    val = val.replace(/,/g,'').trim();
-    if(!isNaN(val) && val!== "") return parseFloat(val).toString();
-    return val.toLowerCase();
-}
-
-// NEW: Store Total Calculate
 function calculateStoreTotal() {
     let storeRaw = document.getElementById('store').value.split('\n').filter(x=>x.trim());
     let total = 0;
@@ -207,31 +200,71 @@ function calculateStoreTotal() {
         let num = parseFloat(line.replace(/,/g,''));
         if(!isNaN(num)) total += num;
     });
-    document.getElementById('storeTotal').innerText = `Store Total: ${total.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    document.getElementById('storeTotal').innerText = `Store Total: ${total.toLocaleString('en-US', {minimumFractionDigits: 2})}`;
+}
+
+// NEW FUNCTION: Break Match check karega
+function findBreakMatch(storeAmt, bankList) {
+    let target = storeAmt;
+    let n = bankList.length;
+    // 2 ya 3 bank amounts ka combination check karega
+    for(let i=0; i<n; i++){
+        if(Math.abs(bankList[i] - target) < 0.01) return [bankList[i]]; // Exact match
+        for(let j=i+1; j<n; j++){
+            if(Math.abs(bankList[i] + bankList[j] - target) < 0.01) return [bankList[i], bankList[j]]; // 2 ka break
+            for(let k=j+1; k<n; k++){
+                if(Math.abs(bankList[i] + bankList[j] + bankList[k] - target) < 0.01) return [bankList[i], bankList[j], bankList[k]]; // 3 ka break
+            }
+        }
+    }
+    return null;
 }
 
 function checkData() {
     if(filteredBankData.length === 0) { alert("Pehle File load karke 3no dropdown select karo!"); return; }
-    let storeRaw = document.getElementById('store').value.split('\n').filter(x=>x.trim());
-    let storeMap = new Map();
-    storeRaw.forEach(line => { let key = normalizeValue(line); if(!storeMap.has(key)) storeMap.set(key, []); storeMap.get(key).push(line); });
 
-    let tableHTML = ""; let matchCount = 0; let usedStore = new Set();
-    filteredBankData.forEach((bankObj, i) => {
-        let key = normalizeValue(bankObj.amount);
-        if(storeMap.has(key) && storeMap.get(key).length > 0) {
-            let storeLine = storeMap.get(key).shift(); usedStore.add(storeLine);
-            tableHTML += `<tr class="match"><td>${i+1}</td><td title="${bankObj.raw}">${bankObj.amount}</td><td title="${storeLine}">${storeLine}</td><td>MATCH</td></tr>`;
-            matchCount++;
-        } else {
-            tableHTML += `<tr class="bankonly"><td>${i+1}</td><td title="${bankObj.raw}">${bankObj.amount}</td><td></td><td>NOT IN STORE</td></tr>`;
+    let storeRaw = document.getElementById('store').value.split('\n').filter(x=>x.trim());
+    let storeAmts = storeRaw.map(x => parseFloat(x.replace(/,/g,''))).filter(x=>!isNaN(x));
+    let bankAmts = filteredBankData.map(x => x.amount);
+
+    let tableHTML = "";
+    let matchCount = 0;
+    let matchTotal = 0;
+    let usedBankIndex = new Set();
+
+    storeAmts.forEach((storeAmt, sIdx) => {
+        let exactIdx = bankAmts.findIndex((b,i) => Math.abs(b - storeAmt) < 0.01 &&!usedBankIndex.has(i));
+
+        if(exactIdx!== -1) { // 1. Exact Match
+            usedBankIndex.add(exactIdx);
+            tableHTML += `<tr class="match"><td>${sIdx+1}</td><td>${bankAmts[exactIdx].toFixed(2)}</td><td>${storeAmt.toFixed(2)}</td><td>EXACT MATCH</td></tr>`;
+            matchCount++; matchTotal += storeAmt;
+        } else { // 2. Break Match Check
+            let breakCombo = findBreakMatch(storeAmt, bankAmts.filter((_,i)=>!usedBankIndex.has(i)));
+            if(breakCombo) {
+                let comboText = breakCombo.map(b=>b.toFixed(2)).join(' + ');
+                breakCombo.forEach(b => {
+                    let idx = bankAmts.findIndex((x,i)=>Math.abs(x-b)<0.01 &&!usedBankIndex.has(i));
+                    if(idx!== -1) usedBankIndex.add(idx);
+                });
+                tableHTML += `<tr class="breakmatch"><td>${sIdx+1}</td><td>${comboText}</td><td>${storeAmt.toFixed(2)}</td><td>BREAK MATCH</td></tr>`;
+                matchCount++; matchTotal += storeAmt;
+            } else { // 3. Not Found
+                tableHTML += `<tr class="storeonly"><td>${sIdx+1}</td><td></td><td>${storeAmt.toFixed(2)}</td><td>NOT IN BANK</td></tr>`;
+            }
         }
     });
-    storeRaw.forEach(storeLine => { if(!usedStore.has(storeLine)) {
-        tableHTML += `<tr class="storeonly"><td></td><td></td><td title="${storeLine}">${storeLine}</td><td>NOT IN BANK</td></tr>`;
-    }});
+
+    // Bank me jo bach gaye
+    bankAmts.forEach((b,i) => {
+        if(!usedBankIndex.has(i)){
+            tableHTML += `<tr class="bankonly"><td></td><td>${b.toFixed(2)}</td><td></td><td>NOT IN STORE</td></tr>`;
+        }
+    });
+
     document.getElementById('resultBody').innerHTML = tableHTML;
     document.getElementById('counter').innerText = ` | Total Match: ${matchCount}`;
+    document.getElementById('matchTotal').innerText = `Matched Total: ${matchTotal.toLocaleString('en-US', {minimumFractionDigits: 2})}`;
 }
 
 function clearStoreOnly() {
@@ -239,6 +272,7 @@ function clearStoreOnly() {
     document.getElementById('resultBody').innerHTML = "";
     document.getElementById('counter').innerText = "";
     document.getElementById('storeTotal').innerText = "Store Total: 0.00";
+    document.getElementById('matchTotal').innerText = "Matched Total: 0.00";
 }
 
 function clearAll() {
