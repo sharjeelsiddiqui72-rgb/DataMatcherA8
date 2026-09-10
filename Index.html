@@ -39,7 +39,8 @@
     th { background: var(--accent); color: white; padding: 4px; border: 1px solid #444; position: sticky; top: 0; z-index: 1; white-space: nowrap; font-size: 13px; }
     td { padding: 3px 5px; border: 1px solid #ddd; background: var(--bg-input); color: var(--text-input); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     tr.match td { background: #FFFF00; color: black; font-weight: bold; }
-    tr.breakmatch td { background: #ADD8E6; color: black; font-weight: bold; } /* NEW: Light Blue */
+    tr.breakmatch td { background: #ADD8E6; color: black; font-weight: bold; } /* Light Blue */
+    tr.groupmatch td { background: #DDA0DD; color: black; font-weight: bold; } /* NEW: Light Purple */
     tr.bankonly td { background: #FFB6C1; color: black; }
     tr.storeonly td { background: #FFA07A; color: black; }
 .button-bar { background: #111; padding: 8px; text-align: center; }
@@ -60,7 +61,7 @@
         <img src="https://placehold.co/45x45/217346/FFD700?text=A8" alt="Active8 Logo" class="logo">
         <div class="header-center">
             <h1>DATA MATCHER</h1>
-            <p>HM-AURA V13.0 | Developed by SHARJEEL SIDDIQUI <span class="counter" id="counter"></span></p>
+            <p>HM-AURA V14.0 | Developed by SHARJEEL SIDDIQUI <span class="counter" id="counter"></span></p>
         </div>
         <button class="theme-btn" onclick="toggleTheme()">🌙 Dark/Light</button>
     </div>
@@ -105,7 +106,7 @@
     </div>
 
     <div class="footer">
-        <div class="brand">HM-AURA V13.0 | Developed by SHARJEEL SIDDIQUI</div>
+        <div class="brand">HM-AURA V14.0 | Developed by SHARJEEL SIDDIQUI</div>
         <div class="contact">📞 For Support & Contact: <b>0092-333-3161173</b></div>
         <div>© 2026 HM-AURA. All Rights Reserved.</div>
     </div>
@@ -203,63 +204,87 @@ function calculateStoreTotal() {
     document.getElementById('storeTotal').innerText = `Store Total: ${total.toLocaleString('en-US', {minimumFractionDigits: 2})}`;
 }
 
-// NEW FUNCTION: Break Match check karega
-function findBreakMatch(storeAmt, bankList) {
-    let target = storeAmt;
-    let n = bankList.length;
-    // 2 ya 3 bank amounts ka combination check karega
-    for(let i=0; i<n; i++){
-        if(Math.abs(bankList[i] - target) < 0.01) return [bankList[i]]; // Exact match
-        for(let j=i+1; j<n; j++){
-            if(Math.abs(bankList[i] + bankList[j] - target) < 0.01) return [bankList[i], bankList[j]]; // 2 ka break
-            for(let k=j+1; k<n; k++){
-                if(Math.abs(bankList[i] + bankList[j] + bankList[k] - target) < 0.01) return [bankList[i], bankList[j], bankList[k]]; // 3 ka break
-            }
+// NEW: Combination find karne wala function
+function findCombination(arr, target, maxLen=3) {
+    let result = [];
+    function helper(start, path, sum) {
+        if(Math.abs(sum - target) < 0.01 && path.length > 0) { result.push([...path]); return true; }
+        if(path.length >= maxLen || sum > target) return false;
+        for(let i=start; i<arr.length; i++) {
+            path.push({val: arr[i], idx: i});
+            if(helper(i+1, path, sum + arr[i])) return true;
+            path.pop();
         }
+        return false;
     }
-    return null;
+    helper(0, [], 0);
+    return result.length > 0? result[0] : null;
 }
 
 function checkData() {
     if(filteredBankData.length === 0) { alert("Pehle File load karke 3no dropdown select karo!"); return; }
 
     let storeRaw = document.getElementById('store').value.split('\n').filter(x=>x.trim());
-    let storeAmts = storeRaw.map(x => parseFloat(x.replace(/,/g,''))).filter(x=>!isNaN(x));
-    let bankAmts = filteredBankData.map(x => x.amount);
+    let storeAmts = storeRaw.map((x,i) => ({val: parseFloat(x.replace(/,/g,'')), idx: i})).filter(x=>!isNaN(x.val));
+    let bankAmts = filteredBankData.map((x,i) => ({val: x.amount, idx: i}));
 
     let tableHTML = "";
     let matchCount = 0;
     let matchTotal = 0;
-    let usedBankIndex = new Set();
+    let usedStoreIdx = new Set();
+    let usedBankIdx = new Set();
 
-    storeAmts.forEach((storeAmt, sIdx) => {
-        let exactIdx = bankAmts.findIndex((b,i) => Math.abs(b - storeAmt) < 0.01 &&!usedBankIndex.has(i));
-
-        if(exactIdx!== -1) { // 1. Exact Match
-            usedBankIndex.add(exactIdx);
-            tableHTML += `<tr class="match"><td>${sIdx+1}</td><td>${bankAmts[exactIdx].toFixed(2)}</td><td>${storeAmt.toFixed(2)}</td><td>EXACT MATCH</td></tr>`;
-            matchCount++; matchTotal += storeAmt;
-        } else { // 2. Break Match Check
-            let breakCombo = findBreakMatch(storeAmt, bankAmts.filter((_,i)=>!usedBankIndex.has(i)));
-            if(breakCombo) {
-                let comboText = breakCombo.map(b=>b.toFixed(2)).join(' + ');
-                breakCombo.forEach(b => {
-                    let idx = bankAmts.findIndex((x,i)=>Math.abs(x-b)<0.01 &&!usedBankIndex.has(i));
-                    if(idx!== -1) usedBankIndex.add(idx);
-                });
-                tableHTML += `<tr class="breakmatch"><td>${sIdx+1}</td><td>${comboText}</td><td>${storeAmt.toFixed(2)}</td><td>BREAK MATCH</td></tr>`;
-                matchCount++; matchTotal += storeAmt;
-            } else { // 3. Not Found
-                tableHTML += `<tr class="storeonly"><td>${sIdx+1}</td><td></td><td>${storeAmt.toFixed(2)}</td><td>NOT IN BANK</td></tr>`;
-            }
+    // STEP 1: Exact Match
+    storeAmts.forEach(s => {
+        if(usedStoreIdx.has(s.idx)) return;
+        let bIdx = bankAmts.findIndex(b => Math.abs(b.val - s.val) < 0.01 &&!usedBankIdx.has(b.idx));
+        if(bIdx!== -1) {
+            usedStoreIdx.add(s.idx); usedBankIdx.add(bankAmts[bIdx].idx);
+            tableHTML += `<tr class="match"><td>${s.idx+1}</td><td>${bankAmts[bIdx].val.toFixed(2)}</td><td>${s.val.toFixed(2)}</td><td>EXACT MATCH</td></tr>`;
+            matchCount++; matchTotal += s.val;
         }
     });
 
-    // Bank me jo bach gaye
-    bankAmts.forEach((b,i) => {
-        if(!usedBankIndex.has(i)){
-            tableHTML += `<tr class="bankonly"><td></td><td>${b.toFixed(2)}</td><td></td><td>NOT IN STORE</td></tr>`;
+    // STEP 2: Break Match - 1 Store vs Many Bank
+    storeAmts.forEach(s => {
+        if(usedStoreIdx.has(s.idx)) return;
+        let availableBank = bankAmts.filter(b =>!usedBankIdx.has(b.idx)).map(b=>b.val);
+        let combo = findCombination(availableBank, s.val, 3);
+        if(combo) {
+            let bankText = combo.map(c=>c.val.toFixed(2)).join(' + ');
+            combo.forEach(c => {
+                let realIdx = bankAmts.findIndex(b => Math.abs(b.val - c.val) < 0.01 &&!usedBankIdx.has(b.idx));
+                if(realIdx!== -1) usedBankIdx.add(bankAmts[realIdx].idx);
+            });
+            usedStoreIdx.add(s.idx);
+            tableHTML += `<tr class="breakmatch"><td>${s.idx+1}</td><td>${bankText}</td><td>${s.val.toFixed(2)}</td><td>BREAK MATCH</td></tr>`;
+            matchCount++; matchTotal += s.val;
         }
+    });
+
+    // STEP 3: GROUP MATCH - Many Store vs Many Bank [NEW]
+    let remainingStore = storeAmts.filter(s =>!usedStoreIdx.has(s.idx));
+    let remainingBank = bankAmts.filter(b =>!usedBankIdx.has(b.idx));
+    let storeSum = remainingStore.reduce((a,b)=>a+b.val,0);
+    let bankSum = remainingBank.reduce((a,b)=>a+b.val,0);
+
+    if(remainingStore.length > 1 && remainingBank.length > 1 && Math.abs(storeSum - bankSum) < 0.01) {
+        let storeText = remainingStore.map(s=>s.val.toFixed(2)).join(' + ');
+        let bankText = remainingBank.map(b=>b.val.toFixed(2)).join(' + ');
+        remainingStore.forEach(s => usedStoreIdx.add(s.idx));
+        remainingBank.forEach(b => usedBankIdx.add(b.idx));
+        tableHTML += `<tr class="groupmatch"><td>G</td><td>${bankText}</td><td>${storeText}</td><td>GROUP MATCH: ${storeSum.toFixed(2)}</td></tr>`;
+        matchCount++; matchTotal += storeSum;
+    }
+
+    // STEP 4: Unmatched
+    remainingStore.forEach(s => {
+        if(!usedStoreIdx.has(s.idx))
+        tableHTML += `<tr class="storeonly"><td>${s.idx+1}</td><td></td><td>${s.val.toFixed(2)}</td><td>NOT IN BANK</td></tr>`;
+    });
+    remainingBank.forEach(b => {
+        if(!usedBankIdx.has(b.idx))
+        tableHTML += `<tr class="bankonly"><td></td><td>${b.val.toFixed(2)}</td><td></td><td>NOT IN STORE</td></tr>`;
     });
 
     document.getElementById('resultBody').innerHTML = tableHTML;
