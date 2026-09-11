@@ -17,7 +17,7 @@
 .logo { height: 45px; width: auto; object-fit: contain; }
 .theme-btn { background: var(--accent-gold); color: #000; border: none; padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; font-weight: bold; }
 .filter-bar { background: var(--bg-box); padding: 8px; display: flex; gap: 10px; justify-content: center; border-bottom: 2px solid var(--accent); flex-wrap: wrap; }
-.filter-bar select { padding: 6px; font-size: 13px; border-radius: 4px; border: 1px solid var(--accent); background: var(--bg-input); color: var(--text-input); min-width: 150px; }
+.filter-bar select,.filter-bar input { padding: 6px; font-size: 13px; border-radius: 4px; border: 1px solid var(--accent); background: var(--bg-input); color: var(--text-input); min-width: 150px; }
 .filter-bar label { font-size: 13px; font-weight: bold; align-self: center; color: var(--accent-gold); }
 .main { display: flex; flex: 1; padding: 8px; gap: 8px; overflow: hidden; }
 .input-box { flex: 0.5; background: var(--bg-box); padding: 8px; border-radius: 6px; display: flex; flex-direction: column; }
@@ -53,7 +53,7 @@
         <img src="https://placehold.co/45x45/217346/FFD700?text=A8" alt="Active8 Logo" class="logo">
         <div class="header-center">
             <h1>DATA MATCHER</h1>
-            <p>HM-AURA V14.4 | Developed by SHARJEEL SIDDIQUI <span class="counter" id="counter"></span></p>
+            <p>HM-AURA V14.6 | Developed by SHARJEEL SIDDIQUI <span class="counter" id="counter"></span></p>
         </div>
         <button class="theme-btn" onclick="toggleTheme()">🌙 Dark/Light</button>
     </div>
@@ -66,7 +66,8 @@
         <label>Market:</label>
         <select id="marketFilter" onchange="marketChanged()"><option value="">--Select Market--</option></select>
         <label>Store ID:</label>
-        <select id="storeIdFilter" onchange="filterChanged()"><option value="">--Select Store ID--</option></select>
+        <select id="storeIdFilter" onchange="storeIdChanged()"><option value="">--Select Store ID--</option></select>
+        <input type="text" id="storeIdSearch" placeholder="Search: 5966 ya TECH5966" onkeyup="searchStoreId()">
     </div>
 
     <div class="main">
@@ -98,7 +99,7 @@
     </div>
 
     <div class="footer">
-        <div class="brand">HM-AURA V14.4 | Developed by SHARJEEL SIDDIQUI</div>
+        <div class="brand">HM-AURA V14.6 | Developed by SHARJEEL SIDDIQUI</div>
         <div class="contact">📞 For Support & Contact: <b>0092-333-3161173</b></div>
         <div>© 2026 HM-AURA. All Rights Reserved.</div>
     </div>
@@ -135,12 +136,46 @@ function populateDropdowns() {
 function marketChanged() {
     let selectedMarket = document.getElementById('marketFilter').value;
     let stores = [...new Set(rawBankData.filter(x =>!selectedMarket || x.market === selectedMarket).map(x=>x.storeId))].filter(Boolean).sort();
-    fillSelect('storeIdFilter', stores); filterChanged();
+    fillSelect('storeIdFilter', stores);
+    document.getElementById('storeIdSearch').value = "";
+    filterChanged();
 }
 function fillSelect(id, arr) {let sel = document.getElementById(id);sel.innerHTML = `<option value="">--Select ${id.replace('Filter','')}--</option>`;arr.forEach(v => { if(v) sel.innerHTML += `<option value="${v}">${v}</option>`; });}
+
+function storeIdChanged() {
+    let val = document.getElementById('storeIdFilter').value;
+    document.getElementById('storeIdSearch').value = val;
+    filterChanged();
+}
+
+// UPDATED: Ab partial search bhi chalega
+function searchStoreId() {
+    let val = document.getElementById('storeIdSearch').value.toUpperCase().trim();
+    let storeDropdown = document.getElementById('storeIdFilter');
+
+    if(val === ""){
+        storeDropdown.value = "";
+        filterChanged();
+        return;
+    }
+
+    // Dropdown me se wo store dhoondo jis me ye text ho
+    let options = [...storeDropdown.options];
+    let found = options.find(opt => opt.value.toUpperCase().includes(val));
+
+    if(found){
+        storeDropdown.value = found.value; // pehla match select kar do
+    } else {
+        storeDropdown.value = ""; // match na mile to blank
+    }
+    filterChanged();
+}
+
 function filterChanged() {applyFilter(); clearStoreOnly();}
 function applyFilter() {
-    let t = document.getElementById('typeFilter').value; let m = document.getElementById('marketFilter').value; let s = document.getElementById('storeIdFilter').value;
+    let t = document.getElementById('typeFilter').value;
+    let m = document.getElementById('marketFilter').value;
+    let s = document.getElementById('storeIdFilter').value;
     filteredBankData = rawBankData.filter(x =>(!t || x.type === t) && (!m || x.market === m) && (!s || x.storeId === s));
     document.getElementById('bank').value = filteredBankData.map(x=>x.amount).join('\n');
 }
@@ -160,14 +195,13 @@ function getCombinations(arr, len) {
 }
 
 function checkData() {
-    if(filteredBankData.length === 0) { alert("Pehle File load karke 3no dropdown select karo!"); return; }
+    if(filteredBankData.length === 0) { alert("Pehle File load karke Type/Market select karo!"); return; }
     let storeRaw = document.getElementById('store').value.split('\n').filter(x=>x.trim());
     let storeAmts = storeRaw.map((x,i) => ({val: parseFloat(x.replace(/,/g,'')), idx: i})).filter(x=>!isNaN(x.val));
     let bankAmts = filteredBankData.map((x,i) => ({val: x.amount, idx: i}));
     let tableHTML = ""; let matchCount = 0; let matchTotal = 0;
     let usedStoreIdx = new Set(); let usedBankIdx = new Set();
 
-    // 1. Exact Match
     storeAmts.forEach(s => {
         if(usedStoreIdx.has(s.idx)) return;
         let bIdx = bankAmts.findIndex(b => Math.abs(b.val - s.val) < 0.01 &&!usedBankIdx.has(b.idx));
@@ -178,7 +212,6 @@ function checkData() {
         }
     });
 
-    // 2. Break Match 1 Store vs Many Bank
     storeAmts.forEach(s => {
         if(usedStoreIdx.has(s.idx)) return;
         let availableBank = bankAmts.filter(b =>!usedBankIdx.has(b.idx));
@@ -198,13 +231,11 @@ function checkData() {
         }
     });
 
-    // 3. GROUP MATCH: Many Store vs Many Bank - POORE DATA ME CHECK [NEW LOGIC]
     let loop = true;
     while(loop){
         loop = false;
         let remainingStore = storeAmts.filter(s =>!usedStoreIdx.has(s.idx));
         let remainingBank = bankAmts.filter(b =>!usedBankIdx.has(b.idx));
-
         for(let sLen=2; sLen<=3; sLen++){
             for(let bLen=1; bLen<=3; bLen++){
                 let sCombos = getCombinations(remainingStore, sLen);
@@ -214,7 +245,6 @@ function checkData() {
                     for(let bCombo of bCombos){
                         let bSum = bCombo.reduce((a,b)=>a+b.val,0);
                         if(Math.abs(sSum - bSum) < 0.01) {
-                            // Group mil gaya. Alag alag row me print karo
                             let maxLen = Math.max(sCombo.length, bCombo.length);
                             for(let i=0; i<maxLen; i++){
                                 let sVal = i < sCombo.length? sCombo[i].val.toFixed(2) : '';
@@ -225,8 +255,7 @@ function checkData() {
                             sCombo.forEach(c => usedStoreIdx.add(c.idx));
                             bCombo.forEach(c => usedBankIdx.add(c.idx));
                             matchCount++; matchTotal += sSum;
-                            loop = true; // dobara check karo
-                            break;
+                            loop = true; break;
                         }
                     }
                     if(loop) break;
@@ -237,7 +266,6 @@ function checkData() {
         }
     }
 
-    // 4. Unmatched
     storeAmts.forEach(s => {if(!usedStoreIdx.has(s.idx))tableHTML += `<tr class="storeonly"><td>${s.idx+1}</td><td></td><td>${s.val.toFixed(2)}</td><td>NOT IN BANK</td></tr>`;});
     bankAmts.forEach(b => {if(!usedBankIdx.has(b.idx))tableHTML += `<tr class="bankonly"><td></td><td>${b.val.toFixed(2)}</td><td></td><td>NOT IN STORE</td></tr>`;});
 
@@ -252,6 +280,7 @@ function clearStoreOnly() {
 }
 function clearAll() {
     rawBankData = []; filteredBankData = []; headers = []; document.getElementById('bank').value = "";
+    document.getElementById('storeIdSearch').value = "";
     clearStoreOnly(); document.getElementById('fileInfo').innerText = "No file loaded";
     document.getElementById('bankFile').value = ""; document.getElementById('filterBar').classList.add('hidden');
 }
